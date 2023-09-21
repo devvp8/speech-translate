@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Translation</title>
+</head>
+<body>
+    <h1>Audio Translation</h1>
+    <button id="startRecording">Start Mike</button>
+    <button id="stopRecording" disabled>Stop Recording</button>
+
+    <script>
+        let chunks = [];
+        let mediaRecorder;
+        let audioBlob;
+
+        const startRecording = async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = (event) => {
+                chunks.push(event.data);
+            };
+            mediaRecorder.onstop = () => {
+                audioBlob = new Blob(chunks, { type: 'audio/wav' });
+                document.getElementById('stopRecording').disabled = true;
+
+            };
+            mediaRecorder.start();
+            document.getElementById('startRecording').disabled = true;
+            document.getElementById('stopRecording').disabled = false;
+            // Call the translateAudio function when recording has stopped
+            translateAudio();
+        };
+
+        const stopRecording = () => {
+            mediaRecorder.stop();
+            document.getElementById('startRecording').disabled = false;
+        };
+
+        const convertAudioToText = () => {
+            return new Promise((resolve, reject) => {
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
+
+                const recognition = new webkitSpeechRecognition();
+                recognition.lang = 'en-US';
+
+                let spokenText = ''; // Store the transcribed text
+
+                recognition.onresult = (event) => {
+                    const spokenText = event.results[0][0].transcript;
+                    resolve(spokenText); // Resolve the promise with the transcribed text
+                };
+
+                audio.addEventListener('canplaythrough', () => {
+                    recognition.start();
+                });
+            });
+        };
+
+        const translateAudio = async () => {
+
+            if (!audioBlob) {
+                console.log('Audio not available yet. Please record first.');
+                return;
+            }
+
+            const spokenText = await convertAudioToText(); // Wait for the transcribed text
+            console.log('Spoken Text:', spokenText);
+
+            const formData = new FormData();
+            formData.append('spokenText', spokenText);
+
+            const response = await fetch('/translate', {
+                method: 'POST',
+                body: formData
+            });
+
+            const translatedText = await response.text();
+            console.log('Translated Text:', translatedText);
+
+            // Re-enable recording after translation is complete
+            document.getElementById('stopRecording').disabled = false;
+            startRecording();
+        };
+
+        document.getElementById('startRecording').addEventListener('click', startRecording);
+        document.getElementById('stopRecording').addEventListener('click', stopRecording);
+    </script>
+</body>
+</html>
